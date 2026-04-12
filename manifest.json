@@ -1,0 +1,15 @@
+{
+  "name": "Kevin & Chey Grocery List",
+  "short_name": "Grocery List",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf8f3",
+  "theme_color": "#0f4c35",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f6d2.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    }
+  ]
+}
