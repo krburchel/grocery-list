@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kevin & Chey's Grocery List</title>
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#0f4c35"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --green: #1a6645;
+    --green-light: #e8f5ee;
+    --green-mid: #2d8a5e;
+    --cream: #faf8f3;
+    --ink: #1a1a18;
+    --ink-muted: #6b6b66;
+    --ink-faint: #c8c8c0;
+    --border: #e2e0d8;
+    --surface: #ffffff;
+    --red: #c0392b;
+    --amber: #b87333;
+    --blue: #2563a8;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--cream); color: var(--ink); font-family: 'DM Sans', sans-serif; }
+
+  /* HEADER */
+  .header {
+    background: var(--green);
+    color: white;
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .header-title { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: 0.01em; }
+  .header-sub { font-size: 11px; opacity: 0.7; margin-top: 1px; }
+  .profile-toggle { display: flex; background: rgba(255,255,255,0.15); border-radius: 20px; padding: 3px; gap: 2px; }
+  .profile-btn {
+    padding: 5px 14px; border-radius: 16px; border: none; background: transparent;
+    color: rgba(255,255,255,0.8); cursor: pointer; font-size: 13px; font-family: 'DM Sans', sans-serif;
+    font-weight: 500; transition: all 0.2s;
+  }
+  .profile-btn.active { background: white; color: var(--green); }
+
+  /* TABS */
+  .tabs {
+    display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 64px; z-index: 99;
+  }
+  .tab {
+    flex: 1; padding: 12px 8px; text-align: center; font-size: 13px; font-weight: 500;
+    color: var(--ink-muted); cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .tab-icon { font-size: 16px; display: block; margin-bottom: 2px; }
+
+  /* CONTENT */
+  .content { padding: 16px; max-width: 600px; margin: 0 auto; padding-bottom: 80px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ADD ITEM */
+  .add-bar {
+    display: flex; gap: 8px; margin-bottom: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px; box-shadow: var(--shadow);
+  }
+  .add-bar input {
+    flex: 1; border: none; background: transparent; font-size: 15px;
+    color: var(--ink); outline: none; font-family: 'DM Sans', sans-serif; padding: 4px;
+  }
+  .add-bar input::placeholder { color: var(--ink-faint); }
+  .cat-pill-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; margin-bottom: 12px; scrollbar-width: none; }
+  .cat-pill-row::-webkit-scrollbar { display: none; }
+  .cat-pill {
+    flex-shrink: 0; padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--surface); font-size: 12px; font-weight: 500; cursor: pointer;
+    color: var(--ink-muted); transition: all 0.15s; white-space: nowrap;
+  }
+  .cat-pill.selected { background: var(--green); border-color: var(--green); color: white; }
+  .add-submit {
+    background: var(--green); color: white; border: none; border-radius: 8px;
+    padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; white-space: nowrap;
+  }
+
+  /* CATEGORY GROUPS */
+  .cat-section { margin-bottom: 20px; }
+  .cat-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cat-name-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+  .cat-count-badge { font-size: 11px; color: var(--ink-faint); margin-left: auto; }
+
+  /* ITEMS */
+  .item {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 6px;
+    transition: all 0.2s; animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+  .item.checked { opacity: 0.4; }
+  .item.checked .item-name { text-decoration: line-through; }
+  .check-circle {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border);
+    cursor: pointer; flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; transition: all 0.2s;
+  }
+  .check-circle.done { background: var(--green); border-color: var(--green); }
+  .check-circle.done::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+  .item-name { flex: 1; font-size: 15px; color: var(--ink); }
+  .item-meta { font-size: 11px; color: var(--ink-faint); text-align: right; line-height: 1.4; }
+  .del-btn {
+    background: none; border: none; cursor: pointer; color: var(--ink-faint);
+    font-size: 18px; padding: 0 4px; line-height: 1; transition: color 0.15s;
+  }
+  .del-btn:hover { color: var(--red); }
+
+  /* EMPTY STATE */
+  .empty {
+    text-align: center; padding: 48px 20px; color: var(--ink-muted);
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty h3 { font-family: 'DM Serif Display', serif; font-size: 20px; color: var(--ink); margin-bottom: 6px; }
+  .empty p { font-size: 14px; line-height: 1.6; }
+
+  /* CLEAR CHECKED */
+  .action-row { display: flex; gap: 8px; margin-top: 4px; }
+  .ghost-btn {
+    flex: 1; padding: 10px; border: 1px dashed var(--border); border-radius: 10px;
+    background: transparent; font-size: 13px; color: var(--ink-muted); cursor: pointer;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .ghost-btn:hover { border-color: var(--green-mid); color: var(--green); }
+
+  /* MEALS */
+  .week-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .meal-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px; transition: border-color 0.15s;
+  }
+  .meal-card:focus-within { border-color: var(--green-mid); }
+  .meal-day-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+  .meal-input {
+    width: 100%; border: none; background: transparent; font-size: 14px;
+    color: var(--ink); outline: none; font-family: 'DM Sans', sans-serif;
+  }
+  .meal-input::placeholder { color: var(--ink-faint); }
+  .meal-add-btn {
+    width: 100%; padding: 12px; background: var(--green-light);
+    border: 1px solid var(--green); border-radius: var(--radius);
+    color: var(--green); font-size: 14px; font-weight: 600; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .meal-add-btn:hover { background: var(--green); color: white; }
+  .meal-note { font-size: 12px; color: var(--ink-muted); text-align: center; margin-top: 8px; line-height: 1.5; }
+
+  /* SUMMARY */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat-num { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--ink); }
+  .stat-lbl { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .progress-wrap { background: var(--green-light); border-radius: 4px; height: 6px; margin-top: 10px; overflow: hidden; }
+  .progress-bar { height: 6px; background: var(--green); border-radius: 4px; transition: width 0.4s ease; }
+  .contrib-section h3 { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 12px; }
+  .contrib-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .contrib-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--green-light); color: var(--green); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .contrib-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .contrib-count { font-size: 13px; color: var(--ink-muted); }
+  .cat-summary-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .cat-summary-bar-wrap { flex: 1; height: 4px; background: var(--green-light); border-radius: 2px; overflow: hidden; }
+  .cat-summary-bar { height: 4px; border-radius: 2px; }
+
+  /* SYNC STATUS */
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; display: inline-block; margin-right: 5px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .sync-status { font-size: 11px; color: rgba(255,255,255,0.6); display: flex; align-items: center; }
+  .sync-dot.offline { background: #f87171; animation: none; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--ink); color: white; padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; z-index: 999; transition: transform 0.3s; pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">Kevin & Chey</div>
+    <div class="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-label">Live</span></div>
+  </div>
+  <div class="profile-toggle">
+    <button class="profile-btn active" onclick="setProfile('Kevin')">Kevin</button>
+    <button class="profile-btn" onclick="setProfile('Chey')">Chey</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="setTab('list')"><span class="tab-icon">🛒</span>List</div>
+  <div class="tab" onclick="setTab('meals')"><span class="tab-icon">🍽️</span>Meals</div>
+  <div class="tab" onclick="setTab('summary')"><span class="tab-icon">📊</span>Summary</div>
+</div>
+
+<div class="content">
+
+  <!-- LIST TAB -->
+  <div class="section active" id="tab-list">
+    <div class="add-bar">
+      <input id="item-input" placeholder="Add an item..." onkeydown="if(event.key==='Enter')addItem()"/>
+      <button class="add-submit" onclick="addItem()">Add</button>
+    </div>
+    <div class="cat-pill-row" id="cat-pills"></div>
+    <div id="items-container"></div>
+    <div class="action-row">
+      <button class="ghost-btn" onclick="clearChecked()">✓ Clear checked</button>
+      <button class="ghost-btn" onclick="clearAll()">🗑 Clear all</button>
+    </div>
+  </div>
+
+  <!-- MEALS TAB -->
+  <div class="section" id="tab-meals">
+    <div class="week-grid" id="meal-grid"></div>
+    <button class="meal-add-btn" onclick="saveMeals()">Save meal plan</button>
+    <p class="meal-note">Tip: After saving, tap "Add meals to list" to pull common ingredients into your grocery list.</p>
+    <button class="ghost-btn" style="margin-top:10px;width:100%" onclick="addMealsToList()">+ Add meals to shopping list</button>
+  </div>
+
+  <!-- SUMMARY TAB -->
+  <div class="section" id="tab-summary">
+    <div class="stats-grid" id="stats-grid"></div>
+    <div class="contrib-section">
+      <h3>By person</h3>
+      <div id="contrib-rows"></div>
+    </div>
+    <div class="contrib-section" style="margin-top:20px">
+      <h3>By category</h3>
+      <div id="cat-rows"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const CATS = ['Produce','Dairy','Meat','Bakery','Pantry','Frozen','Beverages','Other'];
+const CAT_COLORS = {
+  Produce:'#1D9E75', Dairy:'#378ADD', Meat:'#D85A30', Bakery:'#EF9F27',
+  Pantry:'#7F77DD', Frozen:'#5DCAA5', Beverages:'#D4537E', Other:'#888780'
+};
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+let currentProfile = 'Kevin';
+let selectedCat = 'Produce';
+let items = [];
+let meals = DAYS.map(d => ({day:d, meal:''}));
+
+// ── PROFILE ─────────────────────────────────────────────────────────────────
+window.setProfile = (p) => {
+  currentProfile = p;
+  document.querySelectorAll('.profile-btn').forEach(b => b.classList.toggle('active', b.textContent === p));
+};
+
+// ── TABS ─────────────────────────────────────────────────────────────────────
+window.setTab = (t) => {
+  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', ['list','meals','summary'][i] === t));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  if (t === 'summary') renderSummary();
+  if (t === 'meals') renderMeals();
+};
+
+// ── CATEGORY PILLS ───────────────────────────────────────────────────────────
+function renderCatPills() {
+  document.getElementById('cat-pills').innerHTML = CATS.map(c =>
+    `<div class="cat-pill${c===selectedCat?' selected':''}" onclick="selectCat('${c}')">${c}</div>`
+  ).join('');
+}
+window.selectCat = (c) => { selectedCat = c; renderCatPills(); };
+renderCatPills();
+
+// ── ADD ITEM ─────────────────────────────────────────────────────────────────
+window.addItem = async () => {
+  const inp = document.getElementById('item-input');
+  const name = inp.value.trim();
+  if (!name) return;
+  inp.value = '';
+  await addDoc(collection(db, 'items'), {
+    name, cat: selectedCat, done: false, by: currentProfile,
+    addedAt: Date.now()
+  });
+  toast('Added to list!');
+};
+
+// ── TOGGLE / DELETE ──────────────────────────────────────────────────────────
+window.toggleItem = async (id, done) => {
+  await updateDoc(doc(db, 'items', id), { done: !done });
+};
+window.deleteItem = async (id) => {
+  await deleteDoc(doc(db, 'items', id));
+};
+
+// ── CLEAR ────────────────────────────────────────────────────────────────────
+window.clearChecked = async () => {
+  const checked = items.filter(i => i.done);
+  await Promise.all(checked.map(i => deleteDoc(doc(db, 'items', i.id))));
+  toast(`Cleared ${checked.length} item${checked.length!==1?'s':''}`);
+};
+window.clearAll = async () => {
+  if (!confirm('Clear the entire list?')) return;
+  await Promise.all(items.map(i => deleteDoc(doc(db, 'items', i.id))));
+};
+
+// ── RENDER LIST ──────────────────────────────────────────────────────────────
+function renderList() {
+  const container = document.getElementById('items-container');
+  const grouped = {};
+  items.forEach(it => {
+    if (!grouped[it.cat]) grouped[it.cat] = [];
+    grouped[it.cat].push(it);
+  });
+  if (!items.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🌿</div><h3>List is empty</h3><p>Add your first item above.<br>Kevin and Chey can both add items in real-time.</p></div>`;
+    return;
+  }
+  container.innerHTML = Object.keys(grouped).sort().map(cat => `
+    <div class="cat-section">
+      <div class="cat-header">
+        <div class="cat-dot" style="background:${CAT_COLORS[cat]||'#888'}"></div>
+        <span class="cat-name-label">${cat}</span>
+        <span class="cat-count-badge">${grouped[cat].length}</span>
+      </div>
+      ${grouped[cat].map(it => `
+        <div class="item${it.done?' checked':''}">
+          <div class="check-circle${it.done?' done':''}" onclick="toggleItem('${it.id}',${it.done})"></div>
+          <span class="item-name">${it.name}</span>
+          <div class="item-meta">${it.by}<br><span style="font-size:10px">${timeAgo(it.addedAt)}</span></div>
+          <button class="del-btn" onclick="deleteItem('${it.id}')">×</button>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ── MEALS ────────────────────────────────────────────────────────────────────
+function renderMeals() {
+  document.getElementById('meal-grid').innerHTML = meals.map((m,i) => `
+    <div class="meal-card">
+      <div class="meal-day-label">${m.day.slice(0,3)}</div>
+      <input class="meal-input" placeholder="Dinner..." value="${escHtml(m.meal)}" oninput="meals[${i}].meal=this.value"/>
+    </div>`).join('');
+}
+
+window.saveMeals = async () => {
+  await setDoc(doc(db, 'meals', 'week'), { meals: meals.map(m => m.meal) });
+  toast('Meal plan saved!');
+};
+
+window.addMealsToList = async () => {
+  const mealNames = meals.map(m => m.meal).filter(Boolean);
+  if (!mealNames.length) { toast('Add some meals first!'); return; }
+  // Add a note item to the list
+  await addDoc(collection(db, 'items'), {
+    name: `🍽 Meals this week: ${mealNames.slice(0,3).join(', ')}${mealNames.length>3?'...':''}`,
+    cat: 'Other', done: false, by: currentProfile, addedAt: Date.now()
+  });
+  toast('Meals added to list!');
+};
+
+// ── SUMMARY ──────────────────────────────────────────────────────────────────
+function renderSummary() {
+  const total = items.length;
+  const checked = items.filter(i => i.done).length;
+  const pct = total ? Math.round(checked/total*100) : 0;
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-box">
+      <div class="stat-num">${total}</div>
+      <div class="stat-lbl">Total items</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num">${checked}</div>
+      <div class="stat-lbl">In cart</div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+    </div>`;
+
+  const byPerson = {};
+  items.forEach(i => { byPerson[i.by] = (byPerson[i.by]||0)+1; });
+  document.getElementById('contrib-rows').innerHTML = Object.keys(byPerson).map(p => `
+    <div class="contrib-row">
+      <div class="contrib-avatar">${p[0]}</div>
+      <span class="contrib-name">${p}</span>
+      <span class="contrib-count">${byPerson[p]} item${byPerson[p]!==1?'s':''}</span>
+    </div>`).join('');
+
+  const byCat = {};
+  items.forEach(i => { byCat[i.cat] = (byCat[i.cat]||0)+1; });
+  const maxCat = Math.max(...Object.values(byCat),1);
+  document.getElementById('cat-rows').innerHTML = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).map(cat => `
+    <div class="cat-summary-row">
+      <div class="cat-dot" style="background:${CAT_COLORS[cat]||'#888'};width:8px;height:8px;border-radius:50%;flex-shrink:0"></div>
+      <span style="font-size:14px;flex:0 0 80px">${cat}</span>
+      <div class="cat-summary-bar-wrap">
+        <div class="cat-summary-bar" style="width:${Math.round(byCat[cat]/maxCat*100)}%;background:${CAT_COLORS[cat]||'#888'}"></div>
+      </div>
+      <span style="font-size:13px;color:var(--ink-muted);min-width:40px;text-align:right">${byCat[cat]}</span>
+    </div>`).join('');
+}
+
+// ── FIRESTORE LISTENER ───────────────────────────────────────────────────────
+onSnapshot(collection(db, 'items'), snapshot => {
+  items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  items.sort((a,b) => (a.addedAt||0)-(b.addedAt||0));
+  renderList();
+  setSynced(true);
+}, err => { setSynced(false); console.error(err); });
+
+// Load meals
+getDoc(doc(db, 'meals', 'week')).then(d => {
+  if (d.exists()) {
+    const data = d.data().meals;
+    meals = DAYS.map((day,i) => ({ day, meal: data[i]||'' }));
+  }
+});
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function setSynced(ok) {
+  document.getElementById('sync-dot').className = 'sync-dot' + (ok?'':' offline');
+  document.getElementById('sync-label').textContent = ok ? 'Live' : 'Offline';
+}
+function timeAgo(ts) {
+  if (!ts) return '';
+  const s = Math.floor((Date.now()-ts)/1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60)+'m ago';
+  if (s < 86400) return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';
+}
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+let toastTimer;
+window.toast = (msg) => {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+};
+
+// Online/offline detection
+window.addEventListener('online', () => setSynced(true));
+window.addEventListener('offline', () => setSynced(false));
+</script>
+</body>
+</html>
