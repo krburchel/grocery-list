@@ -402,6 +402,24 @@
 
 </div>
 
+<!-- EDIT RECIPE MODAL -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeEditModal()">×</button>
+    <div class="modal-title">Edit Recipe</div>
+    <div style="height:12px"></div>
+    <label class="form-label">Recipe name</label>
+    <input class="form-input" id="edit-recipe-name" placeholder="e.g. Chicken Stir Fry"/>
+    <label class="form-label">Servings</label>
+    <input class="form-input" id="edit-recipe-servings" placeholder="e.g. 4" style="width:100px"/>
+    <label class="form-label">Ingredients</label>
+    <div class="ing-builder" id="edit-ing-builder"></div>
+    <button class="add-ing-btn" onclick="addEditIngRow()">+ Add ingredient</button>
+    <br/><br/>
+    <button class="save-recipe-btn" onclick="saveEditedRecipe()">Save Changes</button>
+  </div>
+</div>
+
 <!-- INGREDIENT MODAL -->
 <div class="modal-backdrop" id="ing-modal">
   <div class="modal">
@@ -609,6 +627,7 @@ function renderSavedRecipes() {
           </div>`).join('')}
         <div class="recipe-actions">
           <button class="recipe-action-btn" onclick="openIngModal('${r.id}')">+ Add to list</button>
+          <button class="recipe-action-btn" onclick="openEditRecipe('${r.id}')">✎ Edit</button>
           <button class="recipe-action-btn danger" onclick="deleteRecipe('${r.id}')">Delete</button>
         </div>
       </div>
@@ -626,6 +645,60 @@ window.deleteRecipe = async (id) => {
   if (!confirm('Delete this recipe?')) return;
   await deleteDoc(doc(db, 'recipes', id));
   toast('Recipe deleted');
+};
+
+// ── RECIPES: EDIT ─────────────────────────────────────────────────────────────
+let editingRecipeId = null;
+
+window.openEditRecipe = (id) => {
+  const r = savedRecipes.find(r => r.id === id);
+  if (!r) return;
+  editingRecipeId = id;
+  document.getElementById('edit-recipe-name').value = r.name || '';
+  document.getElementById('edit-recipe-servings').value = r.servings || '';
+  const builder = document.getElementById('edit-ing-builder');
+  builder.innerHTML = (r.ingredients||[]).map(ing => `
+    <div class="ing-builder-row">
+      <input class="ing-name-input" placeholder="Ingredient name" value="${escHtml(ing.name)}"/>
+      <input class="ing-amt-input" placeholder="Amount" value="${escHtml(ing.amount||'')}"/>
+      <button class="ing-remove-btn" onclick="removeEditIngRow(this)">×</button>
+    </div>`).join('');
+  document.getElementById('edit-modal').classList.add('open');
+};
+
+window.closeEditModal = () => {
+  document.getElementById('edit-modal').classList.remove('open');
+  editingRecipeId = null;
+};
+
+window.addEditIngRow = () => {
+  const builder = document.getElementById('edit-ing-builder');
+  const row = document.createElement('div');
+  row.className = 'ing-builder-row';
+  row.innerHTML = `<input class="ing-name-input" placeholder="Ingredient name"/><input class="ing-amt-input" placeholder="Amount"/><button class="ing-remove-btn" onclick="removeEditIngRow(this)">×</button>`;
+  builder.appendChild(row);
+};
+window.removeEditIngRow = (btn) => { btn.parentElement.remove(); };
+
+window.saveEditedRecipe = async () => {
+  if (!editingRecipeId) return;
+  const name = document.getElementById('edit-recipe-name').value.trim();
+  const servings = document.getElementById('edit-recipe-servings').value.trim();
+  if (!name) { toast('Enter a recipe name'); return; }
+  const rows = document.querySelectorAll('#edit-ing-builder .ing-builder-row');
+  const ingredients = [];
+  rows.forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const ingName = inputs[0].value.trim();
+    const amount = inputs[1].value.trim();
+    if (ingName) ingredients.push({ name: ingName, amount, cat: autoCategory(ingName) });
+  });
+  if (!ingredients.length) { toast('Add at least one ingredient'); return; }
+  try {
+    await updateDoc(doc(db, 'recipes', editingRecipeId), { name, servings, ingredients, updatedAt: Date.now(), updatedBy: currentProfile });
+    toast('Recipe updated!');
+    closeEditModal();
+  } catch(e) { toast('Update failed — check connection'); console.error(e); }
 };
 
 // ── RECIPES: INGREDIENT MODAL ─────────────────────────────────────────────────
