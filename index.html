@@ -318,7 +318,19 @@
 
   .loading-spinner { text-align: center; padding: 24px; color: var(--ink-muted); font-size: 14px; }
 
-  /* SYNC */
+  /* STORE BADGES */
+  .store-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .store-filter-row { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; scrollbar-width: none; padding-bottom: 2px; }
+  .store-filter-row::-webkit-scrollbar { display: none; }
+  .store-filter-btn {
+    flex-shrink: 0; padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer;
+    color: var(--ink-muted); transition: all 0.15s; white-space: nowrap; font-family: 'DM Sans', sans-serif;
+  }
+  .store-filter-btn.active { color: white; border-color: transparent; }
   .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; display: inline-block; margin-right: 5px; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .sync-status { font-size: 11px; color: rgba(255,255,255,0.6); display: flex; align-items: center; }
@@ -375,6 +387,11 @@
       <button class="add-submit" onclick="addItem()">Add</button>
     </div>
     <div class="cat-pill-row" id="cat-pills"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-muted);white-space:nowrap">Store:</span>
+      <div class="cat-pill-row" id="store-pills" style="margin-bottom:0"></div>
+    </div>
+    <div class="store-filter-row" id="store-filter-row"></div>
     <div id="items-container"></div>
     <div class="action-row">
       <button class="ghost-btn" onclick="clearChecked()">✓ Clear checked</button>
@@ -521,7 +538,16 @@ const CAT_COLORS = {
   Produce:'#1D9E75', Dairy:'#378ADD', Meat:'#D85A30', Bakery:'#EF9F27',
   Pantry:'#7F77DD', Frozen:'#5DCAA5', Beverages:'#D4537E', Other:'#888780'
 };
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const STORES = [
+  { name: 'Costco',      color: '#c0392b', bg: '#fdecea' },
+  { name: 'Fred Meyer',  color: '#1a6645', bg: '#e8f5ee' },
+  { name: 'Walmart',     color: '#0071ce', bg: '#e6f2fb' },
+  { name: 'Target',      color: '#cc0000', bg: '#fce8e8' },
+  { name: 'Trader Joe\'s', color: '#b5451b', bg: '#fdf0eb' },
+  { name: 'Safeway',     color: '#d4260a', bg: '#fdecea' },
+  { name: 'Any',         color: '#888780', bg: '#f1efe8' },
+];
+function storeInfo(name) { return STORES.find(s => s.name === name) || STORES[STORES.length-1]; }
 
 // Keyword-based auto-categorizer
 const CAT_KEYWORDS = {
@@ -544,6 +570,8 @@ function autoCategory(ingredientName) {
 
 let currentProfile = 'Kevin';
 let selectedCat = 'Produce';
+let selectedStore = 'Any';
+let storeFilter = 'All';
 let items = [];
 let meals = DAYS.map(d => ({day:d, meal:''}));
 let savedRecipes = [];
@@ -587,13 +615,32 @@ function renderCatPills() {
 window.selectCat = (c) => { selectedCat = c; renderCatPills(); };
 renderCatPills();
 
+function renderStorePills() {
+  document.getElementById('store-pills').innerHTML = STORES.map(s =>
+    `<div class="cat-pill${s.name===selectedStore?' selected':''}" style="${s.name===selectedStore?`background:${s.color};border-color:${s.color};color:white`:''}" onclick="selectStore('${s.name}')">${s.name}</div>`
+  ).join('');
+}
+window.selectStore = (s) => { selectedStore = s; renderStorePills(); };
+renderStorePills();
+
+function renderStoreFilters() {
+  const usedStores = [...new Set(items.map(i => i.store || 'Any'))];
+  const filters = ['All', ...usedStores.filter(s => s !== 'Any'), ...(usedStores.includes('Any') ? ['Any'] : [])];
+  document.getElementById('store-filter-row').innerHTML = filters.map(s => {
+    const info = s === 'All' ? { color: '#1a1a18', bg: '#e2e0d8' } : storeInfo(s);
+    const active = storeFilter === s;
+    return `<button class="store-filter-btn${active?' active':''}" style="${active?`background:${info.color}`:'color:'+info.color+';border-color:'+info.color+'44'}" onclick="setStoreFilter('${s}')">${s}</button>`;
+  }).join('');
+}
+window.setStoreFilter = (s) => { storeFilter = s; renderStoreFilters(); renderList(); };
+
 // ── ADD ITEM ─────────────────────────────────────────────────────────────────
 window.addItem = async () => {
   const inp = document.getElementById('item-input');
   const name = inp.value.trim();
   if (!name) return;
   inp.value = '';
-  await addDoc(collection(db, 'items'), { name, cat: selectedCat, done: false, by: currentProfile, addedAt: Date.now() });
+  await addDoc(collection(db, 'items'), { name, cat: selectedCat, store: selectedStore, done: false, by: currentProfile, addedAt: Date.now() });
   toast('Added to list!');
 };
 
@@ -612,11 +659,17 @@ window.clearAll = async () => {
 
 // ── RENDER LIST ──────────────────────────────────────────────────────────────
 function renderList() {
+  renderStoreFilters();
   const container = document.getElementById('items-container');
+  let filtered = storeFilter === 'All' ? items : items.filter(i => (i.store || 'Any') === storeFilter);
   const grouped = {};
-  items.forEach(it => { if (!grouped[it.cat]) grouped[it.cat] = []; grouped[it.cat].push(it); });
+  filtered.forEach(it => { if (!grouped[it.cat]) grouped[it.cat] = []; grouped[it.cat].push(it); });
   if (!items.length) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">🌿</div><h3>List is empty</h3><p>Add your first item above.<br>Kevin and Chey can both add items in real-time.</p></div>`;
+    return;
+  }
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🏪</div><h3>No items for ${storeFilter}</h3><p>Switch the filter above to see other stores.</p></div>`;
     return;
   }
   container.innerHTML = Object.keys(grouped).sort().map(cat => `
@@ -626,13 +679,17 @@ function renderList() {
         <span class="cat-name-label">${cat}</span>
         <span class="cat-count-badge">${grouped[cat].length}</span>
       </div>
-      ${grouped[cat].map(it => `
+      ${grouped[cat].map(it => {
+        const si = storeInfo(it.store || 'Any');
+        return `
         <div class="item${it.done?' checked':''}">
           <div class="check-circle${it.done?' done':''}" onclick="toggleItem('${it.id}',${it.done})"></div>
           <span class="item-name">${it.name}</span>
+          ${storeFilter === 'All' && it.store && it.store !== 'Any' ? `<span class="store-badge" style="background:${si.bg};color:${si.color}">${it.store}</span>` : ''}
           <div class="item-meta">${it.by}<br><span style="font-size:10px">${timeAgo(it.addedAt)}</span></div>
           <button class="del-btn" onclick="deleteItem('${it.id}')">×</button>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`).join('');
 }
 
@@ -810,7 +867,7 @@ window.addSelectedIngsToList = async () => {
   const toAdd = (modalRecipe.ingredients||[]).filter((_,i) => modalChecked[i]);
   if (!toAdd.length) { toast('Select at least one ingredient'); return; }
   await Promise.all(toAdd.map(ing =>
-    addDoc(collection(db, 'items'), { name: ing.name, cat: ing.cat, done: false, by: currentProfile, addedAt: Date.now() })
+    addDoc(collection(db, 'items'), { name: ing.name, cat: ing.cat, store: selectedStore, done: false, by: currentProfile, addedAt: Date.now() })
   ));
   toast(`Added ${toAdd.length} ingredient${toAdd.length!==1?'s':''} to list!`);
   closeIngModal();
