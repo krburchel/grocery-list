@@ -558,10 +558,15 @@ function renderMeals() {
   document.getElementById('meal-grid').innerHTML = meals.map((m,i) => `
     <div class="meal-card">
       <div class="meal-day-label">${m.day.slice(0,3)}</div>
-      <input class="meal-input" placeholder="Dinner..." value="${escHtml(m.meal)}" oninput="meals[${i}].meal=this.value"/>
+      <input class="meal-input" id="meal-input-${i}" placeholder="Dinner..." value="${escHtml(m.meal)}"/>
     </div>`).join('');
 }
 window.saveMeals = async () => {
+  // Read directly from DOM inputs — avoids module scope issues with inline oninput
+  DAYS.forEach((_, i) => {
+    const el = document.getElementById('meal-input-' + i);
+    if (el) meals[i].meal = el.value.trim();
+  });
   try {
     await setDoc(doc(db, 'meals', 'week'), { meals: meals.map(m => m.meal), updatedAt: Date.now(), updatedBy: currentProfile });
     toast('Meal plan saved!');
@@ -785,7 +790,10 @@ onSnapshot(doc(db, 'meals', 'week'), d => {
   if (d.exists()) {
     const data = d.data().meals;
     meals = DAYS.map((day,i) => ({ day, meal: data[i]||'' }));
-    if (document.getElementById('tab-meals').classList.contains('active')) renderMeals();
+    // Only re-render if the meal tab is active AND user isn't currently typing in a meal input
+    const mealTabActive = document.getElementById('tab-meals').classList.contains('active');
+    const typingInMeals = document.activeElement && document.activeElement.classList.contains('meal-input');
+    if (mealTabActive && !typingInMeals) renderMeals();
   }
 });
 
