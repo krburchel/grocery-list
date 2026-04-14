@@ -914,6 +914,7 @@ document.addEventListener('click', async e => {
     }
     toast(`Added ${lowItems.length} item${lowItems.length>1?'s':''} to list!`);
   }
+  else if(action==='open-cook'){
     const r=savedRecipes.find(r=>r.id===id);
     if(!r||!r.directions) return;
     cookSteps=r.directions.split('\n').map(s=>s.trim()).filter(Boolean);
