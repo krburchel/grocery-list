@@ -616,7 +616,9 @@ window.selectCat = (c) => { selectedCat = c; renderCatPills(); };
 renderCatPills();
 
 function renderStorePills() {
-  document.getElementById('store-pills').innerHTML = STORES.map(s =>
+  const el = document.getElementById('store-pills');
+  if (!el) return;
+  el.innerHTML = STORES.map(s =>
     `<div class="cat-pill${s.name===selectedStore?' selected':''}" style="${s.name===selectedStore?`background:${s.color};border-color:${s.color};color:white`:''}" onclick="selectStore('${s.name}')">${s.name}</div>`
   ).join('');
 }
@@ -624,9 +626,13 @@ window.selectStore = (s) => { selectedStore = s; renderStorePills(); };
 renderStorePills();
 
 function renderStoreFilters() {
+  const el = document.getElementById('store-filter-row');
+  if (!el) return;
   const usedStores = [...new Set(items.map(i => i.store || 'Any'))];
-  const filters = ['All', ...usedStores.filter(s => s !== 'Any'), ...(usedStores.includes('Any') ? ['Any'] : [])];
-  document.getElementById('store-filter-row').innerHTML = filters.map(s => {
+  const named = usedStores.filter(s => s !== 'Any');
+  const hasAny = usedStores.includes('Any');
+  const filters = ['All', ...named, ...(hasAny ? ['Any'] : [])];
+  el.innerHTML = filters.map(s => {
     const info = s === 'All' ? { color: '#1a1a18', bg: '#e2e0d8' } : storeInfo(s);
     const active = storeFilter === s;
     return `<button class="store-filter-btn${active?' active':''}" style="${active?`background:${info.color}`:'color:'+info.color+';border-color:'+info.color+'44'}" onclick="setStoreFilter('${s}')">${s}</button>`;
@@ -897,14 +903,15 @@ window.searchRecipes = async () => {
       }
       const ingData = JSON.stringify(ings).replace(/"/g,'&quot;');
       const instructions = (m.strInstructions||'').replace(/\r\n|\r/g,'\n').trim();
+      mealInstructionsMap[m.strMeal] = instructions;
       return `
-        <div class="search-result-card" data-meal-name="${escHtml(m.strMeal)}" data-instructions="${escHtml(instructions)}">
+        <div class="search-result-card">
           <img class="search-result-thumb" src="${m.strMealThumb}/preview" onerror="this.style.display='none'"/>
           <div style="flex:1">
             <div class="search-result-title">${escHtml(m.strMeal)}</div>
             <div class="search-result-sub">${ings.length} ingredients · ${m.strArea||''} ${m.strCategory||''}</div>
           </div>
-          <button class="import-btn" onclick='importRecipe(${JSON.stringify(m.strMeal)}, ${JSON.stringify(m.strMealThumb)}, "${ingData}", ${m.strMeal.length})'>Save</button>
+          <button class="import-btn" onclick='importRecipe(${JSON.stringify(m.strMeal)}, ${JSON.stringify(m.strMealThumb)}, "${ingData}", 0)'>Save</button>
         </div>`;
     }).join('');
   } catch(e) {
@@ -912,11 +919,12 @@ window.searchRecipes = async () => {
   }
 };
 
+// Store MealDB instructions in a JS map to avoid data-attribute encoding issues
+const mealInstructionsMap = {};
+
 window.importRecipe = async (name, image, ingsJson, _) => {
   const ingredients = JSON.parse(ingsJson.replace(/&quot;/g,'"'));
-  // directions are passed separately via data attribute — look up from last search results
-  const directionsEl = document.querySelector(`[data-meal-name="${CSS.escape(name)}"]`);
-  const directions = directionsEl ? directionsEl.dataset.instructions : '';
+  const directions = mealInstructionsMap[name] || '';
   await addDoc(collection(db, 'recipes'), { name, image, ingredients, servings: '', directions, createdAt: Date.now(), createdBy: currentProfile });
   toast('Recipe saved!');
   setRecipeView('saved');
@@ -1077,6 +1085,10 @@ window.toast = (msg) => {
 
 window.addEventListener('online', () => setSynced(true));
 window.addEventListener('offline', () => setSynced(false));
+
+// Global error safety net — surface crashes as toasts instead of silent lockup
+window.addEventListener('error', e => { toast('Error: ' + (e.message||'unknown')); console.error(e); });
+window.addEventListener('unhandledrejection', e => { toast('Error: ' + (e.reason?.message||'unknown')); console.error(e); });
 </script>
 </body>
 </html>
