@@ -151,6 +151,26 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
 .modal-title{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:4px}
 .modal-sub{font-size:13px;color:var(--ink-muted);margin-bottom:16px}
 .modal-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:var(--ink-muted);margin-top:-4px}
+.inv-add-bar{display:flex;gap:8px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px;box-shadow:var(--shadow);flex-wrap:wrap}
+.inv-add-bar input[type=text]{flex:1;min-width:120px;border:none;background:transparent;font-size:15px;color:var(--ink);outline:none;font-family:'DM Sans',sans-serif;padding:4px}
+.inv-add-bar input[type=text]::placeholder{color:var(--ink-faint)}
+.inv-qty-input{width:64px;border:1px solid var(--border);border-radius:6px;background:var(--cream);font-size:14px;color:var(--ink);padding:4px 8px;font-family:'DM Sans',sans-serif;outline:none}
+.inv-qty-input:focus{border-color:var(--green-mid)}
+.inv-cat-select{border:1px solid var(--border);border-radius:6px;background:var(--cream);font-size:13px;color:var(--ink);padding:4px 8px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
+.inv-cat-select:focus{border-color:var(--green-mid)}
+.inv-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:6px;animation:slideIn 0.2s ease}
+.inv-item-name{flex:1;font-size:15px;color:var(--ink)}
+.inv-item-meta{font-size:11px;color:var(--ink-faint);text-align:right;line-height:1.4;white-space:nowrap}
+.inv-qty-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.inv-qty-btn{width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--cream);font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink-muted);line-height:1;transition:all 0.15s;font-family:'DM Sans',sans-serif}
+.inv-qty-btn:hover{background:var(--green-light);border-color:var(--green-mid);color:var(--green)}
+.inv-qty-display{font-size:14px;font-weight:600;color:var(--ink);min-width:28px;text-align:center}
+.inv-low{border-left:3px solid #EF9F27}
+.inv-out{border-left:3px solid var(--red)}
+.inv-filter-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:12px;scrollbar-width:none}
+.inv-filter-row::-webkit-scrollbar{display:none}
+.inv-legend{display:flex;gap:12px;margin-bottom:12px;font-size:12px;color:var(--ink-muted);flex-wrap:wrap}
+.inv-legend-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
 .cook-overlay{display:none;position:fixed;inset:0;background:var(--ink);z-index:300;flex-direction:column;padding:32px 24px}
 .cook-overlay.open{display:flex}
 .cook-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -182,6 +202,7 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
   <div class="tab active" data-action="set-tab" data-val="list"><span class="tab-icon">🛒</span>List</div>
   <div class="tab" data-action="set-tab" data-val="meals"><span class="tab-icon">🍽️</span>Meals</div>
   <div class="tab" data-action="set-tab" data-val="recipes"><span class="tab-icon">📖</span>Recipes</div>
+  <div class="tab" data-action="set-tab" data-val="inventory"><span class="tab-icon">📦</span>Inventory</div>
   <div class="tab" data-action="set-tab" data-val="summary"><span class="tab-icon">📊</span>Summary</div>
 </div>
 
@@ -247,6 +268,26 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
         <textarea class="directions-textarea" id="new-recipe-directions" placeholder="Enter each step on a new line&#10;e.g.&#10;Preheat oven to 375°F&#10;Mix flour and butter&#10;Bake for 25 minutes"></textarea>
         <button class="save-recipe-btn" data-action="save-new-recipe">Save Recipe</button>
       </div>
+    </div>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="section" id="tab-inventory">
+    <div class="inv-add-bar">
+      <input id="inv-item-input" type="text" placeholder="Item name..."/>
+      <input id="inv-qty-input" class="inv-qty-input" type="text" placeholder="Qty"/>
+      <select id="inv-cat-select" class="inv-cat-select"></select>
+      <button class="add-submit" data-action="add-inv-item">Add</button>
+    </div>
+    <div class="inv-filter-row" id="inv-cat-filter-row"></div>
+    <div class="inv-legend">
+      <span><span class="inv-legend-dot" style="background:#EF9F27"></span>Low (qty ≤ 1)</span>
+      <span><span class="inv-legend-dot" style="background:var(--red)"></span>Out (qty = 0)</span>
+    </div>
+    <div id="inv-container"></div>
+    <div class="action-row">
+      <button class="ghost-btn" data-action="inv-add-out-to-list">🛒 Add "out" items to list</button>
+      <button class="ghost-btn" data-action="inv-add-low-to-list">⚠️ Add low items to list</button>
     </div>
   </div>
 
@@ -375,6 +416,8 @@ let modalChecked = {};
 let editingRecipeId = null;
 let cookSteps = [], cookIdx = 0, cookRecipeName = '';
 const mealInstructionsMap = {};
+let inventory = [];
+let invCatFilter = 'All';
 
 // ── TOAST ────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -560,6 +603,7 @@ document.addEventListener('click', async e => {
     if(val==='summary') renderSummary();
     if(val==='meals') renderMeals();
     if(val==='recipes') renderSavedRecipes();
+    if(val==='inventory'){ renderInvCatSelect(); renderInventory(); }
   }
   else if(action==='select-cat'){ selectedCat=val; renderCatPills(); }
   else if(action==='select-store'){ selectedStore=val; renderStorePills(); }
@@ -760,7 +804,50 @@ document.addEventListener('click', async e => {
       editingRecipeId=null;
     }catch(e){ toast('Update failed — check connection'); console.error(e); }
   }
-  else if(action==='open-cook'){
+  else if(action==='set-inv-cat-filter'){
+    invCatFilter=val; renderInventory();
+  }
+  else if(action==='add-inv-item'){
+    const nameEl=document.getElementById('inv-item-input');
+    const qtyEl=document.getElementById('inv-qty-input');
+    const catEl=document.getElementById('inv-cat-select');
+    const name=nameEl.value.trim();
+    if(!name){ toast('Enter an item name'); return; }
+    const qtyRaw=qtyEl.value.trim();
+    const qty=qtyRaw===''?1:parseInt(qtyRaw)||1;
+    const cat=catEl?catEl.value:autoCategory(name);
+    await addDoc(collection(db,'inventory'),{name,qty,cat,by:currentProfile,addedAt:Date.now()});
+    nameEl.value=''; qtyEl.value='';
+    toast('Added to inventory!');
+  }
+  else if(action==='inv-increment'){
+    const it=inventory.find(i=>i.id===id); if(!it) return;
+    await updateDoc(doc(db,'inventory',id),{qty:(it.qty??1)+1});
+  }
+  else if(action==='inv-decrement'){
+    const it=inventory.find(i=>i.id===id); if(!it) return;
+    const newQty=Math.max(0,(it.qty??1)-1);
+    await updateDoc(doc(db,'inventory',id),{qty:newQty});
+  }
+  else if(action==='inv-delete'){
+    await deleteDoc(doc(db,'inventory',id)); toast('Removed from inventory');
+  }
+  else if(action==='inv-add-out-to-list'){
+    const outItems=inventory.filter(i=>(i.qty??1)===0);
+    if(!outItems.length){ toast('No out-of-stock items'); return; }
+    for(const it of outItems){
+      await addDoc(collection(db,'items'),{name:it.name,cat:it.cat||autoCategory(it.name),store:'Any',done:false,by:currentProfile,addedAt:Date.now()});
+    }
+    toast(`Added ${outItems.length} item${outItems.length>1?'s':''} to list!`);
+  }
+  else if(action==='inv-add-low-to-list'){
+    const lowItems=inventory.filter(i=>(i.qty??1)===1);
+    if(!lowItems.length){ toast('No low-stock items'); return; }
+    for(const it of lowItems){
+      await addDoc(collection(db,'items'),{name:it.name,cat:it.cat||autoCategory(it.name),store:'Any',done:false,by:currentProfile,addedAt:Date.now()});
+    }
+    toast(`Added ${lowItems.length} item${lowItems.length>1?'s':''} to list!`);
+  }
     const r=savedRecipes.find(r=>r.id===id);
     if(!r||!r.directions) return;
     cookSteps=r.directions.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -795,6 +882,64 @@ document.getElementById('recipe-search-input').addEventListener('keydown', e=>{
   if(e.key==='Enter') document.querySelector('[data-action="search-recipes"]').click();
 });
 
+// ── INVENTORY ────────────────────────────────────────────────────────────────
+function renderInvCatSelect(){
+  const sel = document.getElementById('inv-cat-select');
+  if(sel) sel.innerHTML = CATS.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+function renderInvCatFilters(){
+  const el = document.getElementById('inv-cat-filter-row');
+  if(!el) return;
+  const usedCats = ['All',...new Set(inventory.map(i=>i.cat||'Other'))];
+  el.innerHTML = usedCats.map(c=>{
+    const active = invCatFilter===c;
+    const color = CAT_COLORS[c]||'#888';
+    return `<div class="pill${active?' selected':''}" style="${active?`background:${color};border-color:${color};color:white`:''}" data-action="set-inv-cat-filter" data-val="${c}">${c}</div>`;
+  }).join('');
+}
+
+function renderInventory(){
+  renderInvCatFilters();
+  const container = document.getElementById('inv-container');
+  if(!container) return;
+  const filtered = invCatFilter==='All' ? inventory : inventory.filter(i=>(i.cat||'Other')===invCatFilter);
+  if(!inventory.length){
+    container.innerHTML=`<div class="empty"><div class="empty-icon">📦</div><h3>No inventory yet</h3><p>Add items above to track what you have at home.</p></div>`;
+    return;
+  }
+  if(!filtered.length){
+    container.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><h3>Nothing in ${escHtml(invCatFilter)}</h3><p>Try a different category filter.</p></div>`;
+    return;
+  }
+  // group by category
+  const grouped={};
+  filtered.forEach(it=>{ const c=it.cat||'Other'; if(!grouped[c]) grouped[c]=[]; grouped[c].push(it); });
+  container.innerHTML=Object.keys(grouped).sort().map(cat=>`
+    <div class="cat-section">
+      <div class="cat-header">
+        <div class="cat-dot" style="background:${CAT_COLORS[cat]||'#888'}"></div>
+        <span class="cat-name-label">${cat}</span>
+        <span class="cat-count-badge">${grouped[cat].length}</span>
+      </div>
+      ${grouped[cat].sort((a,b)=>a.name.localeCompare(b.name)).map(it=>{
+        const qty = it.qty ?? 1;
+        const isOut = qty===0;
+        const isLow = qty===1;
+        return `<div class="inv-item${isOut?' inv-out':isLow?' inv-low':''}" data-id="${it.id}">
+          <span class="inv-item-name">${escHtml(it.name)}</span>
+          <div class="inv-qty-wrap">
+            <button class="inv-qty-btn" data-action="inv-decrement" data-id="${it.id}">−</button>
+            <span class="inv-qty-display">${qty}</span>
+            <button class="inv-qty-btn" data-action="inv-increment" data-id="${it.id}">+</button>
+          </div>
+          <div class="inv-item-meta">${escHtml(it.by||'')}<br><span style="font-size:10px">${timeAgo(it.addedAt)}</span></div>
+          <button class="del-btn" data-action="inv-delete" data-id="${it.id}">×</button>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+
 // ── FIRESTORE LISTENERS ───────────────────────────────────────────────────────
 function setSynced(ok){
   document.getElementById('sync-dot').className='sync-dot'+(ok?'':' offline');
@@ -824,12 +969,34 @@ onSnapshot(doc(db,'meals','week'), d=>{
   }
 });
 
+onSnapshot(collection(db,'inventory'), snapshot=>{
+  inventory=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+  inventory.sort((a,b)=>(a.addedAt||0)-(b.addedAt||0));
+  if(document.getElementById('tab-inventory').classList.contains('active')) renderInventory();
+  setSynced(true);
+}, ()=>setSynced(false));
+
 window.addEventListener('online',()=>setSynced(true));
 window.addEventListener('offline',()=>setSynced(false));
+
+// Enter key on inventory input
+document.getElementById('inv-item-input').addEventListener('keydown', async e=>{
+  if(e.key!=='Enter') return;
+  const nameEl=document.getElementById('inv-item-input');
+  const qtyEl=document.getElementById('inv-qty-input');
+  const catEl=document.getElementById('inv-cat-select');
+  const name=nameEl.value.trim(); if(!name) return;
+  const qty=parseInt(qtyEl.value.trim())||1;
+  const cat=catEl?catEl.value:autoCategory(name);
+  await addDoc(collection(db,'inventory'),{name,qty,cat,by:currentProfile,addedAt:Date.now()});
+  nameEl.value=''; qtyEl.value='';
+  toast('Added to inventory!');
+});
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 renderCatPills();
 renderStorePills();
+renderInvCatSelect();
 </script>
 </body>
 </html>
