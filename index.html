@@ -62,8 +62,16 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
 .ghost-btn{flex:1;padding:10px;border:1px dashed var(--border);border-radius:10px;background:transparent;font-size:13px;color:var(--ink-muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s}
 .ghost-btn:hover{border-color:var(--green-mid);color:var(--green)}
 .week-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-.meal-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;transition:border-color 0.15s}
+.meal-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;transition:border-color 0.15s;position:relative}
 .meal-card:focus-within{border-color:var(--green-mid)}
+.meal-autocomplete{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--green-mid);border-top:none;border-radius:0 0 var(--radius) var(--radius);z-index:50;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.1);display:none}
+.meal-autocomplete.open{display:block}
+.meal-ac-item{padding:9px 12px;font-size:13px;color:var(--ink);cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.meal-ac-item:last-child{border-bottom:none}
+.meal-ac-item:hover,.meal-ac-item.focused{background:var(--green-light);color:var(--green)}
+.meal-ac-icon{font-size:15px;flex-shrink:0}
+.meal-clear-btn{position:absolute;top:10px;right:10px;background:none;border:none;color:var(--ink-faint);font-size:16px;cursor:pointer;line-height:1;padding:2px;display:none}
+.meal-card:focus-within .meal-clear-btn{display:block}
 .meal-day-label{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
 .meal-input{width:100%;border:none;background:transparent;font-size:14px;color:var(--ink);outline:none;font-family:'DM Sans',sans-serif}
 .meal-input::placeholder{color:var(--ink-faint)}
@@ -487,12 +495,60 @@ function renderList(){
     </div>`).join('');
 }
 
+function getMealSuggestions(query){
+  const q=query.toLowerCase().trim();
+  const recipeNames=savedRecipes.map(r=>({label:r.name,icon:'📖',source:'recipe',id:r.id}));
+  const pastMeals=[...new Set(meals.map(m=>m.meal).filter(Boolean))].map(m=>({label:m,icon:'🕐',source:'history'}));
+  const all=[...recipeNames,...pastMeals.filter(p=>!recipeNames.find(r=>r.label.toLowerCase()===p.label.toLowerCase()))];
+  if(!q) return all.slice(0,8);
+  return all.filter(s=>s.label.toLowerCase().includes(q)).slice(0,8);
+}
+
 function renderMeals(){
   document.getElementById('meal-grid').innerHTML=meals.map((m,i)=>`
-    <div class="meal-card">
+    <div class="meal-card" id="meal-card-${i}">
       <div class="meal-day-label">${m.day.slice(0,3)}</div>
-      <input class="meal-input" id="meal-input-${i}" placeholder="Dinner..." value="${escHtml(m.meal)}"/>
+      <input class="meal-input" id="meal-input-${i}" placeholder="Dinner..." value="${escHtml(m.meal)}" autocomplete="off" data-day="${i}"/>
+      ${m.meal?`<button class="meal-clear-btn" data-action="clear-meal" data-day="${i}" title="Clear">×</button>`:''}
+      <div class="meal-autocomplete" id="meal-ac-${i}"></div>
     </div>`).join('');
+
+  // Attach autocomplete logic to each input
+  DAYS.forEach((_,i)=>{
+    const inp=document.getElementById(`meal-input-${i}`);
+    const ac=document.getElementById(`meal-ac-${i}`);
+    if(!inp||!ac) return;
+    let acFocusIdx=-1;
+
+    function showAc(query){
+      const suggestions=getMealSuggestions(query);
+      if(!suggestions.length){ ac.classList.remove('open'); return; }
+      acFocusIdx=-1;
+      ac.innerHTML=suggestions.map((s,idx)=>`
+        <div class="meal-ac-item" data-idx="${idx}" data-label="${escHtml(s.label)}">
+          <span class="meal-ac-icon">${s.icon}</span>${escHtml(s.label)}
+        </div>`).join('');
+      ac.classList.add('open');
+      ac.querySelectorAll('.meal-ac-item').forEach(el=>{
+        el.addEventListener('mousedown', e=>{
+          e.preventDefault();
+          inp.value=el.dataset.label;
+          ac.classList.remove('open');
+        });
+      });
+    }
+
+    inp.addEventListener('focus', ()=>showAc(inp.value));
+    inp.addEventListener('input', ()=>{ acFocusIdx=-1; showAc(inp.value); });
+    inp.addEventListener('keydown', e=>{
+      const rows=ac.querySelectorAll('.meal-ac-item');
+      if(e.key==='ArrowDown'){ e.preventDefault(); acFocusIdx=Math.min(acFocusIdx+1,rows.length-1); rows.forEach((r,j)=>r.classList.toggle('focused',j===acFocusIdx)); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); acFocusIdx=Math.max(acFocusIdx-1,0); rows.forEach((r,j)=>r.classList.toggle('focused',j===acFocusIdx)); }
+      else if(e.key==='Enter'&&acFocusIdx>=0&&rows[acFocusIdx]){ inp.value=rows[acFocusIdx].dataset.label; ac.classList.remove('open'); }
+      else if(e.key==='Escape'){ ac.classList.remove('open'); }
+    });
+    inp.addEventListener('blur', ()=>setTimeout(()=>ac.classList.remove('open'),150));
+  });
 }
 
 function renderSavedRecipes(){
@@ -629,6 +685,16 @@ document.addEventListener('click', async e => {
   else if(action==='clear-all'){
     if(!confirm('Clear the entire list?')) return;
     await Promise.all(items.map(i=>deleteDoc(doc(db,'items',i.id))));
+  }
+  else if(action==='clear-meal'){
+    const dayIdx=parseInt(e.target.dataset.day);
+    const inp=document.getElementById('meal-input-'+dayIdx);
+    if(inp) inp.value='';
+    meals[dayIdx].meal='';
+    try{
+      await setDoc(doc(db,'meals','week'),{meals:meals.map(m=>m.meal),updatedAt:Date.now(),updatedBy:currentProfile});
+      renderMeals();
+    }catch(err){ console.error(err); }
   }
   else if(action==='save-meals'){
     DAYS.forEach((_,i)=>{ const el=document.getElementById('meal-input-'+i); if(el) meals[i].meal=el.value.trim(); });
