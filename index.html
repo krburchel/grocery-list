@@ -136,7 +136,18 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
 .ing-check.checked{background:var(--green);border-color:var(--green);color:white;font-size:10px;font-weight:700}
 .ing-name{flex:1;font-size:14px;color:var(--ink)}
 .ing-amount{font-size:12px;color:var(--ink-muted)}
-.ing-cat-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:var(--green-light);color:var(--green);font-weight:500}
+.ing-cat-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:var(--green-light);color:var(--green);font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:transform 0.1s}
+.ing-cat-badge:hover{transform:scale(1.05)}
+.cat-picker-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:250;align-items:center;justify-content:center;padding:20px}
+.cat-picker-backdrop.open{display:flex}
+.cat-picker{background:var(--surface);border-radius:var(--radius);padding:16px;max-width:320px;width:100%;box-shadow:0 8px 28px rgba(0,0,0,0.18)}
+.cat-picker-title{font-family:'DM Serif Display',serif;font-size:17px;margin-bottom:4px}
+.cat-picker-sub{font-size:12px;color:var(--ink-muted);margin-bottom:14px}
+.cat-picker-options{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.cat-picker-opt{padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--ink);display:flex;align-items:center;gap:8px;transition:all 0.15s}
+.cat-picker-opt:hover{border-color:var(--green-mid)}
+.cat-picker-opt.current{background:var(--green-light);border-color:var(--green);color:var(--green);font-weight:600}
+.cat-picker-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .recipe-actions{display:flex;gap:8px;margin-top:12px}
 .recipe-action-btn{flex:1;padding:9px;border-radius:8px;border:1px solid var(--green);background:transparent;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s}
 .recipe-action-btn:hover{background:var(--green);color:white}
@@ -354,6 +365,15 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
   </div>
 </div>
 
+<!-- CATEGORY PICKER -->
+<div class="cat-picker-backdrop" id="cat-picker" data-action="close-cat-picker">
+  <div class="cat-picker" onclick="event.stopPropagation()">
+    <div class="cat-picker-title">Change category</div>
+    <div class="cat-picker-sub" id="cat-picker-sub"></div>
+    <div class="cat-picker-options" id="cat-picker-options"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
@@ -426,6 +446,8 @@ let editingRecipeId = null;
 let cookSteps = [], cookIdx = 0, cookRecipeName = '';
 let inventory = [];
 let invCatFilter = 'All';
+let catPickerRecipeId = null;
+let catPickerIngIdx = null;
 const mealInstructionsMap = {};
 
 // ── TOAST ────────────────────────────────────────────────────────────────────
@@ -574,11 +596,11 @@ function renderSavedRecipes(){
       </div>
       <div class="recipe-body" id="rb-${r.id}">
         <div class="recipe-body-title">Ingredients</div>
-        ${(r.ingredients||[]).map(ing=>`
+        ${(r.ingredients||[]).map((ing,idx)=>`
           <div class="ingredient-row">
             <div class="ing-name">${escHtml(ing.name)}</div>
             ${ing.amount?`<div class="ing-amount">${escHtml(ing.amount)}</div>`:''}
-            <div class="ing-cat-badge" style="background:${CAT_COLORS[ing.cat]||'#888'}22;color:${CAT_COLORS[ing.cat]||'#888'}">${ing.cat}</div>
+            <button class="ing-cat-badge" style="background:${CAT_COLORS[ing.cat]||'#888'}22;color:${CAT_COLORS[ing.cat]||'#888'}" data-action="open-cat-picker" data-recipe="${r.id}" data-idx="${idx}" title="Tap to change">${ing.cat}</button>
           </div>`).join('')}
         ${r.directions?`
           <div class="recipe-body-title" style="margin-top:16px">Directions</div>
@@ -603,7 +625,7 @@ function renderModalIngs(){
       <div class="ing-check${modalChecked[i]?' checked':''}" data-action="toggle-modal-ing" data-idx="${i}">${modalChecked[i]?'✓':''}</div>
       <div class="ing-name">${escHtml(ing.name)}</div>
       ${ing.amount?`<div class="ing-amount">${escHtml(ing.amount)}</div>`:''}
-      <div class="ing-cat-badge" style="background:${CAT_COLORS[ing.cat]||'#888'}22;color:${CAT_COLORS[ing.cat]||'#888'}">${ing.cat}</div>
+      <button class="ing-cat-badge" style="background:${CAT_COLORS[ing.cat]||'#888'}22;color:${CAT_COLORS[ing.cat]||'#888'}" data-action="open-cat-picker" data-recipe="${modalRecipe.id}" data-idx="${i}" title="Tap to change">${ing.cat}</button>
     </div>`).join('');
 }
 
@@ -738,6 +760,39 @@ document.addEventListener('click', async e => {
   }
   else if(action==='close-ing-modal'){
     document.getElementById('ing-modal').classList.remove('open');
+  }
+  else if(action==='open-cat-picker'){
+    e.stopPropagation();
+    catPickerRecipeId=el.dataset.recipe;
+    catPickerIngIdx=parseInt(el.dataset.idx);
+    const recipe=savedRecipes.find(r=>r.id===catPickerRecipeId);
+    if(!recipe||!recipe.ingredients||!recipe.ingredients[catPickerIngIdx]) return;
+    const ing=recipe.ingredients[catPickerIngIdx];
+    document.getElementById('cat-picker-sub').textContent=ing.name+(ing.amount?' — '+ing.amount:'');
+    document.getElementById('cat-picker-options').innerHTML=CATS.map(c=>{
+      const isCurrent=c===ing.cat;
+      return `<button class="cat-picker-opt${isCurrent?' current':''}" data-action="choose-cat" data-val="${c}"><span class="cat-picker-dot" style="background:${CAT_COLORS[c]||'#888'}"></span>${c}</button>`;
+    }).join('');
+    document.getElementById('cat-picker').classList.add('open');
+  }
+  else if(action==='choose-cat'){
+    const newCat=val;
+    const recipe=savedRecipes.find(r=>r.id===catPickerRecipeId);
+    if(!recipe) return;
+    const newIngs=recipe.ingredients.map((ing,i)=>i===catPickerIngIdx?{...ing,cat:newCat}:ing);
+    try{
+      await updateDoc(doc(db,'recipes',catPickerRecipeId),{ingredients:newIngs,updatedAt:Date.now(),updatedBy:currentProfile});
+      toast('Category updated!');
+      // Also update the modal if it's open for this recipe
+      if(modalRecipe&&modalRecipe.id===catPickerRecipeId){
+        modalRecipe.ingredients=newIngs;
+        renderModalIngs();
+      }
+    }catch(err){ toast('Update failed'); console.error(err); }
+    document.getElementById('cat-picker').classList.remove('open');
+  }
+  else if(action==='close-cat-picker'){
+    document.getElementById('cat-picker').classList.remove('open');
   }
   else if(action==='toggle-modal-ing'){
     const idx=parseInt(el.dataset.idx);
