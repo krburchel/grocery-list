@@ -39,6 +39,8 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
 .store-filter-row::-webkit-scrollbar{display:none}
 .store-filter-btn{flex-shrink:0;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-muted);transition:all 0.15s;white-space:nowrap;font-family:'DM Sans',sans-serif}
 .store-badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.store-select{font-size:10px;padding:3px 18px 3px 8px;border-radius:10px;font-weight:600;border:none;outline:none;cursor:pointer;font-family:'DM Sans',sans-serif;-webkit-appearance:none;appearance:none;flex-shrink:0;max-width:110px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='currentColor' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");background-repeat:no-repeat;background-position:right 5px center;background-size:8px}
+.store-select.muted{opacity:0.55}
 .cat-section{margin-bottom:20px}
 .cat-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -158,8 +160,6 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
 .step-num{width:24px;height:24px;border-radius:50%;background:var(--green);color:white;font-size:12px;font-weight:600;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px}
 .step-text{font-size:14px;color:var(--ink);line-height:1.6;flex:1}
 .cook-mode-btn{width:100%;padding:11px;background:var(--ink);color:white;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:8px}
-.recipe-notes{background:#fdf6ec;border-left:3px solid var(--amber);padding:10px 12px;border-radius:6px;margin:12px 0 4px;font-size:13px;line-height:1.55;color:var(--ink);white-space:pre-wrap}
-.recipe-notes-label{font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;display:block}
 .create-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
 .form-label{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:6px;display:block}
 .form-input{width:100%;height:38px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--cream);color:var(--ink);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:14px}
@@ -288,8 +288,6 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
         <br/><br/>
         <label class="form-label">Directions</label>
         <textarea class="directions-textarea" id="new-recipe-directions" placeholder="Enter each step on a new line&#10;e.g.&#10;Preheat oven to 375°F&#10;Mix flour and butter&#10;Bake for 25 minutes"></textarea>
-        <label class="form-label">Notes (optional)</label>
-        <textarea class="directions-textarea" id="new-recipe-notes" placeholder="Anything to remember? e.g. 'Chey loves this with extra cheese' or 'Halve the salt next time'" style="min-height:70px"></textarea>
         <button class="save-recipe-btn" data-action="save-new-recipe">Save Recipe</button>
       </div>
     </div>
@@ -354,8 +352,6 @@ html,body{height:100%;background:var(--cream);color:var(--ink);font-family:'DM S
     <br/><br/>
     <label class="form-label">Directions</label>
     <textarea class="directions-textarea" id="edit-recipe-directions" placeholder="Enter each step on a new line"></textarea>
-    <label class="form-label">Notes (optional)</label>
-    <textarea class="directions-textarea" id="edit-recipe-notes" placeholder="Anything to remember?" style="min-height:70px"></textarea>
     <button class="save-recipe-btn" data-action="save-edited-recipe">Save Changes</button>
   </div>
 </div>
@@ -513,10 +509,12 @@ function renderList(){
       </div>
       ${grouped[cat].map(it=>{
         const si=storeInfo(it.store||'Any');
+        const curStore=it.store||'Any';
+        const muted=curStore==='Any'?' muted':'';
         return `<div class="item${it.done?' checked':''}" data-id="${it.id}">
           <div class="check-circle${it.done?' done':''}" data-action="toggle-item" data-id="${it.id}" data-done="${it.done}"></div>
           <span class="item-name">${escHtml(it.name)}</span>
-          ${storeFilter==='All'&&it.store&&it.store!=='Any'?`<span class="store-badge" style="background:${si.bg};color:${si.color}">${escHtml(it.store)}</span>`:''}
+          <select class="store-select${muted}" style="background:${si.bg};color:${si.color}" data-action="set-item-store" data-id="${it.id}" title="Change store">${STORES.map(s=>`<option value="${escHtml(s.name)}"${s.name===curStore?' selected':''}>${escHtml(s.name)}</option>`).join('')}</select>
           <div class="item-meta">${escHtml(it.by)}<br><span style="font-size:10px">${timeAgo(it.addedAt)}</span></div>
           <button class="del-btn" data-action="delete-item" data-id="${it.id}">×</button>
         </div>`;
@@ -601,7 +599,6 @@ function renderSavedRecipes(){
         <span class="recipe-chevron" id="chev-${r.id}">›</span>
       </div>
       <div class="recipe-body" id="rb-${r.id}">
-        ${r.notes?`<div class="recipe-notes"><span class="recipe-notes-label">📝 Notes</span>${escHtml(r.notes)}</div>`:''}
         <div class="recipe-body-title">Ingredients</div>
         ${(r.ingredients||[]).map((ing,idx)=>`
           <div class="ingredient-row">
@@ -673,6 +670,20 @@ function renderSummary(){
       <span style="font-size:13px;color:var(--ink-muted);min-width:40px;text-align:right">${byCat[cat]}</span>
     </div>`).join('');
 }
+
+// ── CHANGE LISTENER (for inline store select) ──────────────────────────────
+document.addEventListener('change', async e => {
+  const el = e.target.closest('[data-action]');
+  if(!el) return;
+  if(el.dataset.action==='set-item-store'){
+    const id=el.dataset.id;
+    const newStore=el.value;
+    try{
+      await updateDoc(doc(db,'items',id),{store:newStore});
+      toast(`Moved to ${newStore}`);
+    }catch(err){ toast('Update failed'); console.error(err); }
+  }
+});
 
 // ── SINGLE DELEGATED EVENT LISTENER ─────────────────────────────────────────
 document.addEventListener('click', async e => {
@@ -875,7 +886,6 @@ document.addEventListener('click', async e => {
     const name=document.getElementById('new-recipe-name').value.trim();
     const servings=document.getElementById('new-recipe-servings').value.trim();
     const directions=document.getElementById('new-recipe-directions').value.trim();
-    const notes=document.getElementById('new-recipe-notes').value.trim();
     if(!name){ toast('Enter a recipe name'); el.disabled=false; return; }
     const ingredients=[];
     document.querySelectorAll('#ing-builder .ing-builder-row').forEach(row=>{
@@ -885,12 +895,11 @@ document.addEventListener('click', async e => {
     });
     if(!ingredients.length){ toast('Add at least one ingredient'); el.disabled=false; return; }
     try{
-      await addDoc(collection(db,'recipes'),{name,image:'',ingredients,servings,directions,notes,createdAt:Date.now(),createdBy:currentProfile});
+      await addDoc(collection(db,'recipes'),{name,image:'',ingredients,servings,directions,createdAt:Date.now(),createdBy:currentProfile});
       toast('Recipe saved!');
       document.getElementById('new-recipe-name').value='';
       document.getElementById('new-recipe-servings').value='';
       document.getElementById('new-recipe-directions').value='';
-      document.getElementById('new-recipe-notes').value='';
       document.getElementById('ing-builder').innerHTML=`<div class="ing-builder-row"><input class="ing-name-input" placeholder="Ingredient name"/><input class="ing-amt-input" placeholder="Amount"/><button class="ing-remove-btn" data-action="remove-ing-row">×</button></div>`;
       document.querySelectorAll('.recipe-tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.val==='saved'));
       document.getElementById('recipe-view-saved').style.display='block';
@@ -907,7 +916,6 @@ document.addEventListener('click', async e => {
     document.getElementById('edit-recipe-name').value=r.name||'';
     document.getElementById('edit-recipe-servings').value=r.servings||'';
     document.getElementById('edit-recipe-directions').value=r.directions||'';
-    document.getElementById('edit-recipe-notes').value=r.notes||'';
     document.getElementById('edit-ing-builder').innerHTML=(r.ingredients||[]).map(ing=>`
       <div class="ing-builder-row">
         <input class="ing-name-input" placeholder="Ingredient name" value="${escHtml(ing.name)}"/>
@@ -925,7 +933,6 @@ document.addEventListener('click', async e => {
     const name=document.getElementById('edit-recipe-name').value.trim();
     const servings=document.getElementById('edit-recipe-servings').value.trim();
     const directions=document.getElementById('edit-recipe-directions').value.trim();
-    const notes=document.getElementById('edit-recipe-notes').value.trim();
     if(!name){ toast('Enter a recipe name'); return; }
     const ingredients=[];
     document.querySelectorAll('#edit-ing-builder .ing-builder-row').forEach(row=>{
@@ -935,7 +942,7 @@ document.addEventListener('click', async e => {
     });
     if(!ingredients.length){ toast('Add at least one ingredient'); return; }
     try{
-      await updateDoc(doc(db,'recipes',editingRecipeId),{name,servings,directions,notes,ingredients,updatedAt:Date.now(),updatedBy:currentProfile});
+      await updateDoc(doc(db,'recipes',editingRecipeId),{name,servings,directions,ingredients,updatedAt:Date.now(),updatedBy:currentProfile});
       toast('Recipe updated!');
       document.getElementById('edit-modal').classList.remove('open');
       editingRecipeId=null;
