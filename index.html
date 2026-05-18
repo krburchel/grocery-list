@@ -254,6 +254,30 @@ body.shopping-mode .cat-empty-placeholder{display:none}
 .cook-nav-btn{flex:1;padding:14px;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;border:1px solid rgba(255,255,255,0.2);background:transparent;color:white;transition:all 0.15s}
 .cook-nav-btn.primary{background:var(--green);border-color:var(--green)}
 .cook-nav-btn:disabled{opacity:0.3;cursor:default}
+
+/* Cook timer */
+.cook-timer-area{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:24px;min-height:42px}
+.cook-timer-display{font-family:'DM Serif Display',serif;font-size:34px;color:white;letter-spacing:1px;font-variant-numeric:tabular-nums;padding:4px 14px;border-radius:10px}
+.cook-timer-display.running{background:rgba(45,138,94,0.25);color:#a8e5c4}
+.cook-timer-display.paused{background:rgba(239,159,39,0.20);color:#f4c87a}
+.cook-timer-display.done{background:rgba(192,57,43,0.30);color:#ffb3a7;animation:pulse-done 1s ease-in-out infinite}
+@keyframes pulse-done{0%,100%{opacity:1}50%{opacity:0.55}}
+.cook-timer-btn{padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;border:1px solid rgba(255,255,255,0.25);background:transparent;color:white;white-space:nowrap}
+.cook-timer-btn.primary{background:var(--green);border-color:var(--green)}
+.cook-timer-btn:hover{background:rgba(255,255,255,0.08)}
+.cook-timer-btn.primary:hover{background:var(--green-mid)}
+
+/* URL import block (new-recipe form) */
+.url-import-block{background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius);padding:12px;margin-bottom:16px}
+.url-import-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--green);margin-bottom:6px;display:block}
+.url-import-row{display:flex;gap:8px}
+.url-import-row input{flex:1;padding:8px 10px;border:1px solid var(--border);background:var(--surface);border-radius:8px;font-size:14px;color:var(--ink);outline:none;font-family:'DM Sans',sans-serif}
+.url-import-row input:focus{border-color:var(--green-mid)}
+.url-import-btn{padding:8px 16px;background:var(--green);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.url-import-btn:disabled{opacity:0.6;cursor:wait}
+.url-import-status{font-size:12px;color:var(--ink-muted);margin-top:8px;min-height:14px;font-style:italic}
+.url-import-status.error{color:var(--red);font-style:normal}
+.url-import-status.success{color:var(--green);font-style:normal}
 </style>
 </head>
 <body>
@@ -327,6 +351,14 @@ body.shopping-mode .cat-empty-placeholder{display:none}
     </div>
     <div id="recipe-view-create" style="display:none">
       <div class="create-form">
+        <div class="url-import-block">
+          <label class="url-import-label">🔗 Import from URL</label>
+          <div class="url-import-row">
+            <input id="recipe-url-input" type="url" placeholder="https://..." autocomplete="off"/>
+            <button class="url-import-btn" data-action="import-recipe-url">Import</button>
+          </div>
+          <div class="url-import-status" id="url-import-status"></div>
+        </div>
         <label class="form-label">Recipe name</label>
         <input class="form-input" id="new-recipe-name" placeholder="e.g. Chicken Stir Fry"/>
         <label class="form-label">Servings</label>
@@ -385,6 +417,7 @@ body.shopping-mode .cat-empty-placeholder{display:none}
   <div class="cook-progress" id="cook-progress"></div>
   <div class="cook-step-num" id="cook-step-num"></div>
   <div class="cook-step-text" id="cook-step-text"></div>
+  <div class="cook-timer-area" id="cook-timer-area"></div>
   <div class="cook-nav">
     <button class="cook-nav-btn" id="cook-prev" data-action="cook-prev">← Back</button>
     <button class="cook-nav-btn primary" id="cook-next" data-action="cook-next">Next →</button>
@@ -834,6 +867,257 @@ function renderCookStep(){
   const nb=document.getElementById('cook-next');
   nb.textContent=cookIdx===cookSteps.length-1?'✓ Done':'Next →';
   nb.dataset.action=cookIdx===cookSteps.length-1?'close-cook':'cook-next';
+  renderCookTimer();
+}
+
+// ── COOK TIMER ──────────────────────────────────────────────────────────────
+let cookTimer = null; // {state:'running'|'paused'|'done', endsAt, pausedMs, intervalId}
+
+function formatCookTime(ms){
+  const total=Math.max(0,Math.ceil(ms/1000));
+  const m=Math.floor(total/60), s=total%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+
+// Parse "Bake for 25 minutes" / "simmer 1 hour" / "for 5-7 mins" → milliseconds (or null)
+function parseStepDuration(text){
+  if(!text) return null;
+  const re=/(\d+(?:\.\d+)?)(?:\s*[-–to]+\s*(\d+(?:\.\d+)?))?\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)\b/gi;
+  let m, best=0;
+  while((m=re.exec(text))){
+    const a=parseFloat(m[1]);
+    const b=m[2]?parseFloat(m[2]):a;
+    const val=Math.min(a,b); // conservative: use lower end of ranges
+    const unit=m[3].toLowerCase();
+    let mins=0;
+    if(unit.startsWith('h')) mins=val*60;
+    else if(unit.startsWith('s')) mins=val/60;
+    else mins=val;
+    if(mins>best) best=mins;
+  }
+  return best>0 ? Math.round(best*60*1000) : null;
+}
+
+function beepTimerDone(){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    function tone(freq,start,duration){
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value=freq; osc.type='sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime+start);
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime+start+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+start+duration);
+      osc.start(ctx.currentTime+start); osc.stop(ctx.currentTime+start+duration);
+    }
+    tone(880,0,0.25); tone(880,0.35,0.25); tone(1108,0.7,0.55);
+  }catch(_){}
+  if(navigator.vibrate) try{ navigator.vibrate([300,150,300,150,600]); }catch(_){}
+}
+
+function tickCookTimer(){
+  if(!cookTimer || cookTimer.state!=='running') return;
+  const remaining=cookTimer.endsAt - Date.now();
+  if(remaining<=0){
+    clearInterval(cookTimer.intervalId);
+    cookTimer.state='done';
+    beepTimerDone();
+    renderCookTimer();
+  } else {
+    const disp=document.querySelector('.cook-timer-display.running');
+    if(disp) disp.textContent=formatCookTime(remaining);
+  }
+}
+
+function startCookTimer(ms){
+  stopCookTimer();
+  cookTimer={state:'running', endsAt:Date.now()+ms, pausedMs:0, intervalId:null};
+  cookTimer.intervalId=setInterval(tickCookTimer, 250);
+  renderCookTimer();
+}
+
+function pauseCookTimer(){
+  if(!cookTimer || cookTimer.state!=='running') return;
+  clearInterval(cookTimer.intervalId);
+  cookTimer.pausedMs=Math.max(0, cookTimer.endsAt-Date.now());
+  cookTimer.state='paused';
+  renderCookTimer();
+}
+
+function resumeCookTimer(){
+  if(!cookTimer || cookTimer.state!=='paused') return;
+  cookTimer.endsAt=Date.now()+cookTimer.pausedMs;
+  cookTimer.state='running';
+  cookTimer.intervalId=setInterval(tickCookTimer, 250);
+  renderCookTimer();
+}
+
+function stopCookTimer(){
+  if(cookTimer && cookTimer.intervalId) clearInterval(cookTimer.intervalId);
+  cookTimer=null;
+}
+
+function renderCookTimer(){
+  const area=document.getElementById('cook-timer-area');
+  if(!area) return;
+  if(!cookSteps.length){ area.innerHTML=''; return; }
+  if(cookTimer && cookTimer.state==='running'){
+    const remaining=Math.max(0, cookTimer.endsAt-Date.now());
+    area.innerHTML=`
+      <div class="cook-timer-display running">${formatCookTime(remaining)}</div>
+      <button class="cook-timer-btn" data-action="cook-pause-timer">⏸ Pause</button>
+      <button class="cook-timer-btn" data-action="cook-cancel-timer">Cancel</button>`;
+  } else if(cookTimer && cookTimer.state==='paused'){
+    area.innerHTML=`
+      <div class="cook-timer-display paused">${formatCookTime(cookTimer.pausedMs)}</div>
+      <button class="cook-timer-btn primary" data-action="cook-resume-timer">▶ Resume</button>
+      <button class="cook-timer-btn" data-action="cook-cancel-timer">Cancel</button>`;
+  } else if(cookTimer && cookTimer.state==='done'){
+    area.innerHTML=`
+      <div class="cook-timer-display done">✓ Timer done!</div>
+      <button class="cook-timer-btn primary" data-action="cook-cancel-timer">Dismiss</button>`;
+  } else {
+    const ms=parseStepDuration(cookSteps[cookIdx]);
+    if(ms){
+      area.innerHTML=`
+        <button class="cook-timer-btn primary" data-action="cook-start-timer" data-ms="${ms}">⏱ Start ${formatCookTime(ms)} timer</button>
+        <button class="cook-timer-btn" data-action="cook-custom-timer">+ Custom</button>`;
+    } else {
+      area.innerHTML=`<button class="cook-timer-btn" data-action="cook-custom-timer">⏱ Add timer</button>`;
+    }
+  }
+}
+
+// ── RECIPE URL IMPORT ───────────────────────────────────────────────────────
+function setUrlStatus(msg, kind){
+  const el=document.getElementById('url-import-status');
+  if(!el) return;
+  el.textContent=msg||'';
+  el.classList.remove('error','success');
+  if(kind) el.classList.add(kind);
+}
+
+function decodeHtml(text){
+  if(!text) return '';
+  const ta=document.createElement('textarea');
+  ta.innerHTML=String(text);
+  return ta.value;
+}
+
+async function fetchRecipePage(url){
+  // Try direct first (works on permissive sites), then public CORS proxies.
+  const attempts=[
+    u=>u,
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+  let lastErr=null;
+  for(const build of attempts){
+    try{
+      const r=await fetch(build(url), {mode:'cors'});
+      if(r.ok){
+        const text=await r.text();
+        if(text && text.length>200) return text;
+      } else {
+        lastErr=new Error('HTTP '+r.status);
+      }
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr||new Error('All fetch attempts failed');
+}
+
+function findJsonLdRecipe(html){
+  const re=/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while((m=re.exec(html))){
+    let data;
+    try{ data=JSON.parse(m[1]); }catch(_){ continue; }
+    const r=findRecipeInObj(data);
+    if(r) return r;
+  }
+  return null;
+}
+
+function findRecipeInObj(obj){
+  if(!obj) return null;
+  if(Array.isArray(obj)){
+    for(const x of obj){ const r=findRecipeInObj(x); if(r) return r; }
+    return null;
+  }
+  if(typeof obj!=='object') return null;
+  const t=obj['@type'];
+  const types=Array.isArray(t)?t:[t];
+  if(types.includes('Recipe')) return obj;
+  if(obj['@graph']) return findRecipeInObj(obj['@graph']);
+  return null;
+}
+
+const ING_UNITS=['cups','cup','tsp','teaspoons','teaspoon','tbsp','tablespoons','tablespoon','oz','ounces','ounce','lb','lbs','pounds','pound','g','grams','gram','kg','ml','liters','liter','pinches','pinch','dashes','dash','cloves','clove','sticks','stick','cans','can','jars','jar','packages','package','pkgs','pkg','bunches','bunch','heads','head','slices','slice','pieces','piece','sprigs','sprig','stalks','stalk'];
+
+function parseIngredientLine(raw){
+  const line=decodeHtml(String(raw||'')).replace(/\s+/g,' ').trim();
+  if(!line) return null;
+  const numMatch=line.match(/^([\d\s\.\/\-–½¼¾⅓⅔⅛⅜⅝⅞]+)\s*(.*)$/);
+  if(!numMatch || !numMatch[1].trim()) return {name:line, amount:'', cat:autoCategory(line)};
+  let amount=numMatch[1].trim();
+  let rest=numMatch[2].trim();
+  const unitRe=new RegExp('^('+ING_UNITS.join('|')+')\\b\\.?\\s*(.*)','i');
+  const unitMatch=rest.match(unitRe);
+  if(unitMatch){
+    amount+=' '+unitMatch[1];
+    rest=unitMatch[2].trim();
+  }
+  rest=rest.replace(/^of\s+/i,'').trim();
+  if(!rest) return {name:line, amount:'', cat:autoCategory(line)};
+  return {name:rest, amount, cat:autoCategory(rest)};
+}
+
+function flattenJsonLdInstructions(instr){
+  if(!instr) return [];
+  if(typeof instr==='string') return instr.split(/\n+/).map(s=>decodeHtml(s).trim()).filter(Boolean);
+  if(!Array.isArray(instr)) instr=[instr];
+  const steps=[];
+  for(const item of instr){
+    if(typeof item==='string'){ steps.push(decodeHtml(item).trim()); continue; }
+    if(!item || typeof item!=='object') continue;
+    if(item.text){ steps.push(decodeHtml(item.text).trim()); continue; }
+    const t=item['@type']; const types=Array.isArray(t)?t:[t];
+    if(types.includes('HowToSection') && Array.isArray(item.itemListElement)){
+      for(const sub of item.itemListElement){
+        if(typeof sub==='string') steps.push(decodeHtml(sub).trim());
+        else if(sub && sub.text) steps.push(decodeHtml(sub.text).trim());
+      }
+      continue;
+    }
+    if(item.name) steps.push(decodeHtml(item.name).trim());
+  }
+  // Strip leading "1. " / "Step 1: " from each
+  return steps.map(s=>s.replace(/^(step\s*)?\d+[\.\):\-]\s*/i,'').trim()).filter(Boolean);
+}
+
+function parseJsonLdYield(y){
+  if(y==null) return '';
+  if(Array.isArray(y)) y=y[0];
+  if(typeof y==='number') return String(y);
+  const m=String(y).match(/\d+/);
+  return m?m[0]:'';
+}
+
+function populateRecipeForm(recipe){
+  document.getElementById('new-recipe-name').value = decodeHtml(recipe.name||'');
+  document.getElementById('new-recipe-servings').value = parseJsonLdYield(recipe.recipeYield);
+  const ings = (recipe.recipeIngredient||recipe.ingredients||[])
+    .map(parseIngredientLine).filter(Boolean);
+  const builder=document.getElementById('ing-builder');
+  if(ings.length){
+    builder.innerHTML = ings.map(i=>`<div class="ing-builder-row">
+      <input class="ing-name-input" placeholder="Ingredient name" value="${escHtml(i.name)}"/>
+      <input class="ing-amt-input" placeholder="Amount" value="${escHtml(i.amount)}"/>
+      <button class="ing-remove-btn" data-action="remove-ing-row">×</button>
+    </div>`).join('');
+  }
+  const steps=flattenJsonLdInstructions(recipe.recipeInstructions);
+  document.getElementById('new-recipe-directions').value = steps.join('\n');
 }
 
 function renderSummary(){
@@ -1420,6 +1704,7 @@ document.addEventListener('click', async e => {
     if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{});
   }
   else if(action==='close-cook'){
+    stopCookTimer();
     document.getElementById('cook-overlay').classList.remove('open');
   }
   else if(action==='cook-prev'){
@@ -1427,6 +1712,49 @@ document.addEventListener('click', async e => {
   }
   else if(action==='cook-next'){
     cookIdx=Math.min(cookSteps.length-1,cookIdx+1); renderCookStep();
+  }
+  else if(action==='cook-start-timer'){
+    const ms=parseInt(el.dataset.ms);
+    if(ms>0) startCookTimer(ms);
+  }
+  else if(action==='cook-custom-timer'){
+    const ans=prompt('Timer minutes:');
+    if(ans==null) return;
+    const mins=parseFloat(ans);
+    if(isNaN(mins)||mins<=0){ toast('Enter a valid number of minutes'); return; }
+    startCookTimer(Math.round(mins*60*1000));
+  }
+  else if(action==='cook-pause-timer'){ pauseCookTimer(); }
+  else if(action==='cook-resume-timer'){ resumeCookTimer(); }
+  else if(action==='cook-cancel-timer'){ stopCookTimer(); renderCookTimer(); }
+  else if(action==='import-recipe-url'){
+    const inp=document.getElementById('recipe-url-input');
+    const btn=el;
+    const raw=(inp.value||'').trim();
+    if(!raw){ setUrlStatus('Paste a recipe URL first','error'); return; }
+    let url=raw;
+    if(!/^https?:\/\//i.test(url)) url='https://'+url;
+    btn.disabled=true; btn.textContent='Importing…';
+    setUrlStatus('Fetching the page…');
+    try{
+      const html=await fetchRecipePage(url);
+      setUrlStatus('Parsing recipe…');
+      const recipe=findJsonLdRecipe(html);
+      if(!recipe){
+        setUrlStatus('No structured recipe found on that page — fill in manually below.','error');
+        return;
+      }
+      populateRecipeForm(recipe);
+      const ingCount=document.querySelectorAll('#ing-builder .ing-builder-row').length;
+      const stepCount=(document.getElementById('new-recipe-directions').value||'').split('\n').filter(Boolean).length;
+      setUrlStatus(`Imported ${ingCount} ingredient${ingCount!==1?'s':''} and ${stepCount} step${stepCount!==1?'s':''}. Review and save below.`,'success');
+      inp.value='';
+    }catch(err){
+      console.error('Recipe import failed:', err);
+      setUrlStatus('Could not fetch that URL (CORS-blocked or proxy down). Copy the recipe text manually below.','error');
+    }finally{
+      btn.disabled=false; btn.textContent='Import';
+    }
   }
 });
 
