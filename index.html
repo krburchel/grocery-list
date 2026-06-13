@@ -6,6 +6,11 @@
 <title>Kevin & Chey's Grocery List</title>
 <link rel="manifest" href="manifest.json"/>
 <meta name="theme-color" content="#0f4c35"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="Grocery List"/>
+<link rel="apple-touch-icon" href="apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -468,7 +473,7 @@ body.shopping-mode .cat-empty-placeholder{display:none}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, onSnapshot, updateDoc, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDMwLUUxeJXQYpXK3d25hGUeZ5zsu-4bBc",
@@ -480,7 +485,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Offline-first: serve reads from an IndexedDB cache and queue writes while the
+// signal is bad (the whole point of using this in a grocery store). Multi-tab
+// manager keeps the cache consistent if the app is open on more than one tab.
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 
 // ── CONSTANTS ────────────────────────────────────────────────────────────────
 const CATS = ['Produce','Dairy','Meat','Bakery','Pantry','Frozen','Beverages','Other'];
@@ -526,6 +536,8 @@ function timeAgo(ts){
 
 // ── STATE ────────────────────────────────────────────────────────────────────
 let currentProfile = 'Kevin';
+// Remember who's using this device so Chey isn't re-credited to Kevin every load.
+try { const sp = localStorage.getItem('profile'); if(sp==='Kevin'||sp==='Chey') currentProfile = sp; } catch(_){}
 let selectedCat = 'Produce';
 let selectedStore = 'Any';
 let storeFilter = 'All';
@@ -1287,6 +1299,7 @@ document.addEventListener('click', async e => {
 
   if(action==='set-profile'){
     currentProfile=val;
+    try{ localStorage.setItem('profile', val); }catch(_){}
     document.querySelectorAll('.profile-btn').forEach(b=>b.classList.toggle('active',b.dataset.val===val));
   }
   else if(action==='set-tab'){
@@ -1931,6 +1944,14 @@ document.getElementById('inv-item-input').addEventListener('keydown', async func
 renderCatPills();
 renderStorePills();
 renderInvCatSelect();
+// Reflect the restored profile (Task 1) on the toggle buttons.
+document.querySelectorAll('.profile-btn').forEach(b=>b.classList.toggle('active', b.dataset.val===currentProfile));
+// Register the service worker so the app shell opens even on dead store wifi.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW registration failed:', err));
+  });
+}
 // Restore shopping-mode UI state on load
 if(shoppingMode){
   document.body.classList.add('shopping-mode');
