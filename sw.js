@@ -4,7 +4,7 @@
 // own IndexedDB offline layer (persistentLocalCache) that queues writes and
 // serves cached reads. We only cache the static shell + SDK modules + fonts.
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = 'grocery-shell-' + VERSION;
 const RUNTIME = 'grocery-runtime-' + VERSION;
 
