@@ -30,6 +30,16 @@ function isBlockedHost(host: string): boolean {
   return false;
 }
 
+// Fallback when the site blocks us directly (e.g. Shopify 429s Supabase IPs): Jina Reader
+// fetches from its own IPs and returns raw HTML. Must be called server-side — Cloudflare
+// challenges Jina requests that carry a real browser User-Agent.
+async function fetchViaJina(url: URL): Promise<Response> {
+  return await fetch(`https://r.jina.ai/${url}`, {
+    headers: { "User-Agent": UA, "X-Return-Format": "html" },
+    signal: AbortSignal.timeout(25000),
+  });
+}
+
 function checkUrl(raw: string): URL {
   const u = new URL(raw);
   if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("bad protocol");
@@ -63,7 +73,9 @@ Deno.serve(async (req) => {
       break;
     }
     if (!res || !res.ok) {
-      return new Response(`upstream ${res?.status ?? "error"}`, { status: 502, headers });
+      const direct = res?.status ?? "error";
+      res = await fetchViaJina(checkUrl(target)).catch(() => null);
+      if (!res || !res.ok) return new Response(`upstream ${direct}`, { status: 502, headers });
     }
     const buf = await res.arrayBuffer();
     if (buf.byteLength > MAX_BYTES) return new Response("too large", { status: 413, headers });

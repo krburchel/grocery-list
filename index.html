@@ -1105,11 +1105,10 @@ function decodeHtml(text){
 const RECIPE_FETCH_URL='https://bzvibdjrknqvmurwjroq.supabase.co/functions/v1/recipe-fetch';
 
 async function fetchRecipePage(url){
-  // Our proxy first; then Jina Reader (different egress IPs, gets past e.g. Shopify's
-  // 429s on Supabase IPs); then direct (works on the rare site that allows CORS).
+  // Our proxy first (it falls back to Jina Reader server-side), then direct
+  // (works on the rare site that allows CORS).
   const attempts=[
     [u=>`${RECIPE_FETCH_URL}?url=${encodeURIComponent(u)}`],
-    [u=>`https://r.jina.ai/${u}`, {headers:{'X-Return-Format':'html'}}],
     [u=>u],
   ];
   let lastErr=null, pageWithoutData=null;
