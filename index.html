@@ -1105,24 +1105,28 @@ function decodeHtml(text){
 const RECIPE_FETCH_URL='https://bzvibdjrknqvmurwjroq.supabase.co/functions/v1/recipe-fetch';
 
 async function fetchRecipePage(url){
-  // Our proxy first, then direct (works on the rare site that allows CORS).
+  // Our proxy first; then Jina Reader (different egress IPs, gets past e.g. Shopify's
+  // 429s on Supabase IPs); then direct (works on the rare site that allows CORS).
   const attempts=[
-    u=>`${RECIPE_FETCH_URL}?url=${encodeURIComponent(u)}`,
-    u=>u,
+    [u=>`${RECIPE_FETCH_URL}?url=${encodeURIComponent(u)}`],
+    [u=>`https://r.jina.ai/${u}`, {headers:{'X-Return-Format':'html'}}],
+    [u=>u],
   ];
-  let lastErr=null;
-  for(const build of attempts){
+  let lastErr=null, pageWithoutData=null;
+  for(const [build, opts] of attempts){
     try{
-      const r=await fetch(build(url), {mode:'cors'});
+      const r=await fetch(build(url), {mode:'cors', ...opts});
       if(r.ok){
         const text=await r.text();
-        if(text && text.length>200) return text;
-      } else {
+        if(text && /application\/ld\+json/i.test(text)) return text;
+        pageWithoutData=pageWithoutData||text||'';
+      } else if(!lastErr){
         const body=await r.text().catch(()=>'');
-        lastErr=new Error(/upstream 403/.test(body)?'site-blocked':'HTTP '+r.status);
+        lastErr=new Error(/upstream 4\d\d/.test(body)?'site-blocked':'HTTP '+r.status);
       }
     }catch(e){ if(!lastErr) lastErr=e; }
   }
+  if(pageWithoutData!==null) return pageWithoutData; // fetched fine, just no recipe data
   throw lastErr||new Error('All fetch attempts failed');
 }
 
@@ -1853,7 +1857,7 @@ document.addEventListener('click', async e => {
     }catch(err){
       console.error('Recipe import failed:', err);
       setUrlStatus(err.message==='site-blocked'
-        ? 'That site blocks importers (Allrecipes, Simply Recipes, Serious Eats, Food Network do). Copy the recipe in manually below.'
+        ? 'That site blocks importers (Allrecipes, Simply Recipes and Serious Eats do). Copy the recipe in manually below.'
         : 'Could not fetch that URL. Check the link, or copy the recipe in manually below.','error');
     }finally{
       btn.disabled=false; btn.textContent='Import';
