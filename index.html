@@ -1100,12 +1100,15 @@ function decodeHtml(text){
   return ta.value;
 }
 
+// Our own Supabase edge function (supabase/functions/recipe-fetch) — fetches the page
+// server-side and returns just its JSON-LD blocks. Free public CORS proxies kept dying.
+const RECIPE_FETCH_URL='https://bzvibdjrknqvmurwjroq.supabase.co/functions/v1/recipe-fetch';
+
 async function fetchRecipePage(url){
-  // Try direct first (works on permissive sites), then public CORS proxies.
+  // Our proxy first, then direct (works on the rare site that allows CORS).
   const attempts=[
+    u=>`${RECIPE_FETCH_URL}?url=${encodeURIComponent(u)}`,
     u=>u,
-    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
   ];
   let lastErr=null;
   for(const build of attempts){
@@ -1115,9 +1118,10 @@ async function fetchRecipePage(url){
         const text=await r.text();
         if(text && text.length>200) return text;
       } else {
-        lastErr=new Error('HTTP '+r.status);
+        const body=await r.text().catch(()=>'');
+        lastErr=new Error(/upstream 403/.test(body)?'site-blocked':'HTTP '+r.status);
       }
-    }catch(e){ lastErr=e; }
+    }catch(e){ if(!lastErr) lastErr=e; }
   }
   throw lastErr||new Error('All fetch attempts failed');
 }
@@ -1848,7 +1852,9 @@ document.addEventListener('click', async e => {
       inp.value='';
     }catch(err){
       console.error('Recipe import failed:', err);
-      setUrlStatus('Could not fetch that URL (CORS-blocked or proxy down). Copy the recipe text manually below.','error');
+      setUrlStatus(err.message==='site-blocked'
+        ? 'That site blocks importers (Allrecipes, Simply Recipes, Serious Eats, Food Network do). Copy the recipe in manually below.'
+        : 'Could not fetch that URL. Check the link, or copy the recipe in manually below.','error');
     }finally{
       btn.disabled=false; btn.textContent='Import';
     }

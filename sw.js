@@ -4,7 +4,7 @@
 // own IndexedDB offline layer (persistentLocalCache) that queues writes and
 // serves cached reads. We only cache the static shell + SDK modules + fonts.
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = 'grocery-shell-' + VERSION;
 const RUNTIME = 'grocery-runtime-' + VERSION;
 
@@ -46,8 +46,8 @@ self.addEventListener('fetch', e => {
   // auth, installations). Fonts are on *.googleapis.com too, so allow those.
   if (host.endsWith('googleapis.com') && !host.startsWith('fonts.')) return;
   if (host.endsWith('firebaseio.com')) return;
-  // Recipe search / CORS proxies are live API calls — don't serve them stale.
-  if (/themealdb\.com|allorigins\.win|corsproxy\.io/.test(host)) return;
+  // Recipe search / recipe-fetch proxy are live API calls — don't serve them stale.
+  if (/themealdb\.com|supabase\.co/.test(host)) return;
 
   // Navigations: network-first so updates ship, fall back to the cached shell offline.
   if (req.mode === 'navigate') {
