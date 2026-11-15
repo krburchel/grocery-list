@@ -29,7 +29,8 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
-        keys.filter(k => k !== SHELL && k !== RUNTIME).map(k => caches.delete(k))
+        // Only this app's caches: every app on krburchel.github.io shares one cache store.
+        keys.filter(k => k.startsWith('grocery-') && k !== SHELL && k !== RUNTIME).map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   );
